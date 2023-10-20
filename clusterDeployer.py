@@ -168,12 +168,12 @@ def limit_dhcp_range(h: host.Host, old_range: str, new_range: str) -> None:
     cmd = "virsh net-dumpxml default"
     ret = h.run(cmd)
     if f"range start='{old_range}'" in ret.out:
-        host_xml = f"<range start='{old_range}' end='192.168.122.254'/>"
+        host_xml = f"<range start='{old_range}' end='192.168.124.254'/>"
         cmd = f"virsh net-update default delete ip-dhcp-range \"{host_xml}\" --live --config"
         r = h.run(cmd)
         logger.debug(r.err if r.err else r.out)
 
-        host_xml = f"<range start='{new_range}' end='192.168.122.254'/>"
+        host_xml = f"<range start='{new_range}' end='192.168.124.254'/>"
         cmd = f"virsh net-update default add ip-dhcp-range \"{host_xml}\" --live --config"
         r = h.run(cmd)
         logger.debug(r.err if r.err else r.out)
@@ -216,9 +216,9 @@ def configure_bridge(h: host.Host, api_network: str) -> None:
         logger.info("Destoying and recreating bridge")
         logger.info(f"creating default-net.xml on {hostname}")
         if hostname == "localhost":
-            contents = network_xml('192.168.122.1', ('192.168.122.129', '192.168.122.254'))
+            contents = network_xml('192.168.122.1', ('192.168.124.129', '192.168.124.254'))
         else:
-            contents = network_xml('192.168.123.250')
+            contents = network_xml('192.168.124.250')
 
         bridge_xml = os.path.join("/tmp", 'vir_bridge.xml')
         h.write(bridge_xml, contents)
@@ -228,7 +228,7 @@ def configure_bridge(h: host.Host, api_network: str) -> None:
         time.sleep(5)
         ensure_bridge_is_started(h, api_network, bridge_xml)
 
-        limit_dhcp_range(h, "192.168.122.2", "192.168.122.129")
+        limit_dhcp_range(h, "192.168.122.2", "192.168.124.129")
 
         cmd = "systemctl restart libvirtd"
         h.run_or_die(cmd)
@@ -332,7 +332,7 @@ class ClusterDeployer:
                 removed_macs.append(mac)
 
         # bring back initial dynamic dhcp range.
-        limit_dhcp_range(lh, "192.168.122.129", "192.168.122.2")
+        limit_dhcp_range(lh, "192.168.124.129", "192.168.122.2")
 
         fn = "/var/lib/libvirt/dnsmasq/virbr0.status"
         with open(fn) as f:
@@ -822,7 +822,7 @@ class ClusterDeployer:
             rh = host.RemoteHost(w.ip)
             rh.ssh_connect("core")
             hosts.append(rh)
-        subnet = "192.168.122.0/24"
+        subnet = "192.168.0.0/16"
         logger.info(f"Connectivity established to all workers; checking that they have an IP in {subnet}")
 
         def addresses(h: host.Host) -> List[str]:
