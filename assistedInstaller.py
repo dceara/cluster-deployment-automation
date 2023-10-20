@@ -130,7 +130,7 @@ class AssistedClientAutomation(AssistedClient):  # type: ignore
             for default_nic in default_nics:
                 nic_info = next(nic for nic in inventory.get('interfaces') if nic["name"] == default_nic)
                 addr = str(nic_info['ipv4_addresses'][0].split('/')[0])
-                if common.ip_in_subnet(addr, "192.168.122.0/24"):
+                if common.ip_in_subnet(addr, "192.168.0.0/16"):
                     return addr
         return None
 

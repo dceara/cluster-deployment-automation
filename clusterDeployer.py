@@ -200,9 +200,9 @@ def configure_bridge(h: host.Host, api_network: str) -> None:
         logger.info("Destoying and recreating bridge")
         logger.info(f"creating default-net.xml on {hostname}")
         if hostname == "localhost":
-            contents = network_xml('192.168.122.1', ('192.168.122.129', '192.168.122.254'))
+            contents = network_xml('192.168.0.1', ('192.168.0.2', '192.168.255.254'))
         else:
-            contents = network_xml('192.168.123.250')
+            contents = network_xml('192.168.255.254')
 
         bridge_xml = os.path.join("/tmp", 'vir_bridge.xml')
         h.write(bridge_xml, contents)
@@ -801,7 +801,7 @@ class ClusterDeployer:
             rh = host.RemoteHost(w.ip)
             rh.ssh_connect("core")
             hosts.append(rh)
-        subnet = "192.168.122.0/24"
+        subnet = "192.168.0.0/16"
         logger.info(f"Connectivity established to all workers; checking that they have an IP in {subnet}")
 
         def addresses(h: host.Host) -> List[str]:
