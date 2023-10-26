@@ -216,9 +216,9 @@ def configure_bridge(h: host.Host, api_network: str) -> None:
         logger.info("Destoying and recreating bridge")
         logger.info(f"creating default-net.xml on {hostname}")
         if hostname == "localhost":
-            contents = network_xml('192.168.122.1', ('192.168.124.129', '192.168.124.254'))
+            contents = network_xml('192.168.122.1', ('192.168.122.129', '192.168.124.249'))
         else:
-            contents = network_xml('192.168.124.250')
+            contents = network_xml('192.168.124.254')
 
         bridge_xml = os.path.join("/tmp", 'vir_bridge.xml')
         h.write(bridge_xml, contents)
