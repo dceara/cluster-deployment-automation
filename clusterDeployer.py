@@ -163,23 +163,6 @@ def ensure_bridge_is_started(h: host.Host, api_network: str, bridge_xml: str) ->
     h.run(f"ip link set {api_network} up")
 
 
-def limit_dhcp_range(h: host.Host, old_range: str, new_range: str) -> None:
-    # restrict dynamic dhcp range: we use static dhcp ip addresses; however, those addresses might have been used
-    # through the dynamic dhcp by any systems such as systems ready to be installed.
-    cmd = "virsh net-dumpxml default"
-    ret = h.run(cmd)
-    if f"range start='{old_range}'" in ret.out:
-        host_xml = f"<range start='{old_range}' end='192.168.122.254'/>"
-        cmd = f"virsh net-update default delete ip-dhcp-range \"{host_xml}\" --live --config"
-        r = h.run(cmd)
-        logger.debug(r.err if r.err else r.out)
-
-        host_xml = f"<range start='{new_range}' end='192.168.122.254'/>"
-        cmd = f"virsh net-update default add ip-dhcp-range \"{host_xml}\" --live --config"
-        r = h.run(cmd)
-        logger.debug(r.err if r.err else r.out)
-
-
 def network_xml(ip: str, dhcp_range: Optional[Tuple[str, str]] = None) -> str:
     if dhcp_range is None:
         dhcp_part = ""
@@ -228,8 +211,6 @@ def configure_bridge(h: host.Host, api_network: str) -> None:
         # We need to investigate how to remove the sleep to speed up
         time.sleep(5)
         ensure_bridge_is_started(h, api_network, bridge_xml)
-
-        limit_dhcp_range(h, "192.168.122.2", "192.168.122.129")
 
         cmd = "systemctl restart libvirtd"
         h.run_or_die(cmd)
@@ -331,9 +312,6 @@ class ClusterDeployer:
                 cmd = f"{pre} \"<host mac='{mac}' name='{name}' ip='{ip}'/>\" --live --config"
                 logger.info(lh.run(cmd))
                 removed_macs.append(mac)
-
-        # bring back initial dynamic dhcp range.
-        limit_dhcp_range(lh, "192.168.122.129", "192.168.122.2")
 
         fn = "/var/lib/libvirt/dnsmasq/virbr0.status"
         with open(fn) as f:
