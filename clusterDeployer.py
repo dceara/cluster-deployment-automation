@@ -185,9 +185,9 @@ def network_xml(ip: str, dhcp_range: Optional[Tuple[str, str]] = None) -> str:
 def configure_bridge(h: host.Host, api_network: str) -> None:
     hostname = h.hostname()
     cmd = "systemctl enable libvirtd"
-    h.run_or_die(cmd)
+    h.run(cmd)
     cmd = "systemctl start libvirtd"
-    h.run_or_die(cmd)
+    h.run(cmd)
 
     # stp must be disabled or it might conflict with default configuration of some physical switches
     # 'bridge' section of network 'default' can't be updated => destroy and recreate
@@ -212,7 +212,7 @@ def configure_bridge(h: host.Host, api_network: str) -> None:
         ensure_bridge_is_started(h, api_network, bridge_xml)
 
         cmd = "systemctl restart libvirtd"
-        h.run_or_die(cmd)
+        h.run(cmd)
 
         # Not sure why/whether this is needed. But we saw failures w/o it.
         # We need to investigate how to remove the sleep to speed up
