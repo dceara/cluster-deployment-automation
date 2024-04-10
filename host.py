@@ -294,17 +294,33 @@ class Host:
     def need_sudo(self) -> None:
         self.sudo_needed = True
 
-    def run(self, cmd: str, log_level: int = logging.DEBUG, env: dict[str, str] = os.environ.copy()) -> Result:
+    def run(
+        self,
+        cmd: str,
+        log_level: int = logging.DEBUG,
+        env: dict[str, str] = os.environ.copy(),
+        *,
+        log_prefix: str = "",
+        log_level_result: Optional[int] = None,
+        log_level_fail: Optional[int] = None,
+    ) -> Result:
         if self.sudo_needed:
             cmd = "sudo " + cmd
 
-        logger.log(log_level, f"running command {cmd} on {self._hostname}")
+        logger.log(log_level, f"{log_prefix}running command {cmd} on {self._hostname}")
         if self.is_localhost():
             ret_val = self._run_local(cmd, env)
         else:
             ret_val = self._run_remote(cmd, log_level)
 
-        logger.log(log_level, ret_val)
+        if ret_val.returncode != 0 and log_level_fail is not None:
+            level = log_level_fail
+        elif log_level_result is not None:
+            level = log_level_result
+        else:
+            level = log_level
+        logger.log(level, f"{log_prefix}command {cmd} {'failed' if ret_val.returncode != 0 else 'succeeded'}: {ret_val}")
+
         return ret_val
 
     def _run_local(self, cmd: str, env: dict[str, str]) -> Result:
