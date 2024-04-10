@@ -199,10 +199,9 @@ class ClusterDeployer:
                     logger.info("Skipping master creation.")
 
                 if "workers" in self.steps:
-                    if len(self._cc.workers) != 0:
-                        self.create_workers()
-                    else:
-                        logger.info("Skipping worker creation.")
+                    self.create_workers()
+                else:
+                    logger.info("Skipping worker creation.")
         if self._cc.kind == "microshift":
             version = match_to_proper_version_format(self._cc.version)
 
@@ -377,6 +376,9 @@ class ClusterDeployer:
         self.update_dnsmasq()
 
     def create_workers(self) -> None:
+        if len(self._cc.workers) == 0:
+            logger.info("No worker to setup. Skip")
+            return
         logger.info("Setting up workers")
         cluster_name = self._cc.name
 
