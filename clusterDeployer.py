@@ -6,10 +6,11 @@ import json
 import xml.etree.ElementTree as et
 import shutil
 from concurrent.futures import ThreadPoolExecutor
-from typing import Optional
-from typing import Generator
-from typing import Union
 from typing import Callable
+from typing import Generator
+from typing import Iterable
+from typing import Optional
+from typing import Union
 import re
 import logging
 from assistedInstaller import AssistedClientAutomation
@@ -309,7 +310,14 @@ class ClusterDeployer:
 
         return infra_env
 
+    def nodes_set_password(self, *, is_workers: bool, hosts: Iterable[ClusterHost]) -> None:
+        logger.info("Setting password to for root to redhat")
+        for h in hosts:
+            for worker in h.k8s_worker_nodes if is_workers else h.k8s_master_nodes:
+                worker.set_password()
+
     def create_masters(self) -> None:
+        logger.info("Setting up masters")
         cluster_name = self._cc.name
 
         infra_env = self.ensure_infraenv_created(is_workers=False)
@@ -364,10 +372,7 @@ class ClusterDeployer:
         for h in hosts_with_masters:
             h.ensure_linked_to_network(self._local_host.bridge)
 
-        logger.info("Setting password to for root to redhat")
-        for h in hosts_with_masters:
-            for master in h.k8s_master_nodes:
-                master.set_password()
+        self.nodes_set_password(is_workers=False, hosts=hosts_with_masters)
 
         self.update_dnsmasq()
 
@@ -439,10 +444,7 @@ class ClusterDeployer:
         logger.info("waiting for workers to be ready")
         self.wait_for_workers()
 
-        logger.info("Setting password to for root to redhat")
-        for h in hosts_with_workers:
-            for worker in h.k8s_worker_nodes:
-                worker.set_password()
+        self.nodes_set_password(is_workers=True, hosts=hosts_with_workers)
 
         # Make sure any submitted tasks have completed.
         for p in futures:
