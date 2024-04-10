@@ -284,21 +284,35 @@ class ClusterDeployer:
         logger.info(cfg)
         self._ai.create_cluster(cluster_name, cfg)
 
-    def create_masters(self) -> None:
+    def ensure_infraenv_created(self, *, is_workers: bool) -> str:
         cluster_name = self._cc.name
-        infra_env = f"{cluster_name}-{self.masters_arch}"
+        if is_workers:
+            infra_env = f"{cluster_name}-{self.workers_arch}"
+        else:
+            infra_env = f"{cluster_name}-{self.masters_arch}"
         logger.info(f"Ensuring infraenv {infra_env} exists.")
 
         cfg = {}
         cfg["cluster"] = cluster_name
         cfg["pull_secret"] = self._secrets_path
-        cfg["cpu_architecture"] = self.masters_arch
+        if is_workers:
+            cfg["cpu_architecture"] = self.workers_arch
+        else:
+            cfg["cpu_architecture"] = self.masters_arch
         cfg["openshift_version"] = self._cc.version
         if self._cc.proxy:
             cfg["proxy"] = self._cc.proxy
         if self._cc.noproxy:
             cfg["noproxy"] = self._cc.noproxy
+
         self._ai.ensure_infraenv_created(infra_env, cfg)
+
+        return infra_env
+
+    def create_masters(self) -> None:
+        cluster_name = self._cc.name
+
+        infra_env = self.ensure_infraenv_created(is_workers=False)
 
         hosts_with_masters = self._all_hosts_with_masters()
 
@@ -360,21 +374,11 @@ class ClusterDeployer:
     def create_workers(self) -> None:
         logger.info("Setting up workers")
         cluster_name = self._cc.name
-        infra_env = f"{cluster_name}-{self.workers_arch}"
 
         self._ai.allow_add_workers(cluster_name)
 
-        cfg = {}
-        cfg["cluster"] = cluster_name
-        cfg["pull_secret"] = self._secrets_path
-        cfg["cpu_architecture"] = self.workers_arch
-        cfg["openshift_version"] = self._cc.version
-        if self._cc.proxy:
-            cfg["proxy"] = self._cc.proxy
-        if self._cc.noproxy:
-            cfg["noproxy"] = self._cc.noproxy
+        infra_env = self.ensure_infraenv_created(is_workers=True)
 
-        self._ai.ensure_infraenv_created(infra_env, cfg)
         hosts_with_workers = self._all_hosts_with_workers()
 
         # Ensure the virtual bridge is properly configured and
