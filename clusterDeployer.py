@@ -6,10 +6,11 @@ import json
 import xml.etree.ElementTree as et
 import shutil
 from concurrent.futures import ThreadPoolExecutor
-from typing import Optional
-from typing import Generator
-from typing import Union
 from typing import Callable
+from typing import Generator
+from typing import Iterable
+from typing import Optional
+from typing import Union
 import re
 import logging
 from assistedInstaller import AssistedClientAutomation
@@ -23,6 +24,7 @@ import microshift
 from extraConfigRunner import ExtraConfigRunner
 from clusterHost import ClusterHost
 import dnsutil
+from virshPool import VirshPool
 
 
 def match_to_proper_version_format(version_cluster_config: str) -> str:
@@ -154,6 +156,14 @@ class ClusterDeployer:
             logger.info(self._local_host.hostconn.run("virsh net-start default"))
             logger.info(self._local_host.hostconn.run("systemctl restart libvirtd"))
 
+            image_paths = {os.path.dirname(n.image_path) for n in self._cc.local_vms()}
+            for image_path in image_paths:
+                vp = VirshPool(
+                    name=os.path.basename(image_path),
+                    host=self._local_host.hostconn,
+                )
+                vp.ensure_removed()
+
         for h in self._all_hosts:
             h.ensure_not_linked_to_network()
 
@@ -198,10 +208,9 @@ class ClusterDeployer:
                     logger.info("Skipping master creation.")
 
                 if "workers" in self.steps:
-                    if len(self._cc.workers) != 0:
-                        self.create_workers()
-                    else:
-                        logger.info("Skipping worker creation.")
+                    self.create_workers()
+                else:
+                    logger.info("Skipping worker creation.")
         if self._cc.kind == "microshift":
             version = match_to_proper_version_format(self._cc.version)
 
@@ -284,21 +293,42 @@ class ClusterDeployer:
         logger.info(cfg)
         self._ai.create_cluster(cluster_name, cfg)
 
-    def create_masters(self) -> None:
+    def ensure_infraenv_created(self, *, is_workers: bool) -> str:
         cluster_name = self._cc.name
-        infra_env = f"{cluster_name}-{self.masters_arch}"
+        if is_workers:
+            infra_env = f"{cluster_name}-{self.workers_arch}"
+        else:
+            infra_env = f"{cluster_name}-{self.masters_arch}"
         logger.info(f"Ensuring infraenv {infra_env} exists.")
 
         cfg = {}
         cfg["cluster"] = cluster_name
         cfg["pull_secret"] = self._secrets_path
-        cfg["cpu_architecture"] = self.masters_arch
+        if is_workers:
+            cfg["cpu_architecture"] = self.workers_arch
+        else:
+            cfg["cpu_architecture"] = self.masters_arch
         cfg["openshift_version"] = self._cc.version
         if self._cc.proxy:
             cfg["proxy"] = self._cc.proxy
         if self._cc.noproxy:
             cfg["noproxy"] = self._cc.noproxy
+
         self._ai.ensure_infraenv_created(infra_env, cfg)
+
+        return infra_env
+
+    def nodes_set_password(self, *, is_workers: bool, hosts: Iterable[ClusterHost]) -> None:
+        logger.info("Setting password to for root to redhat")
+        for h in hosts:
+            for worker in h.k8s_worker_nodes if is_workers else h.k8s_master_nodes:
+                worker.set_password()
+
+    def create_masters(self) -> None:
+        logger.info("Setting up masters")
+        cluster_name = self._cc.name
+
+        infra_env = self.ensure_infraenv_created(is_workers=False)
 
         hosts_with_masters = self._all_hosts_with_masters()
 
@@ -350,31 +380,21 @@ class ClusterDeployer:
         for h in hosts_with_masters:
             h.ensure_linked_to_network(self._local_host.bridge)
 
-        logger.info("Setting password to for root to redhat")
-        for h in hosts_with_masters:
-            for master in h.k8s_master_nodes:
-                master.set_password()
+        self.nodes_set_password(is_workers=False, hosts=hosts_with_masters)
 
         self.update_dnsmasq()
 
     def create_workers(self) -> None:
+        if len(self._cc.workers) == 0:
+            logger.info("No worker to setup. Skip")
+            return
         logger.info("Setting up workers")
         cluster_name = self._cc.name
-        infra_env = f"{cluster_name}-{self.workers_arch}"
 
         self._ai.allow_add_workers(cluster_name)
 
-        cfg = {}
-        cfg["cluster"] = cluster_name
-        cfg["pull_secret"] = self._secrets_path
-        cfg["cpu_architecture"] = self.workers_arch
-        cfg["openshift_version"] = self._cc.version
-        if self._cc.proxy:
-            cfg["proxy"] = self._cc.proxy
-        if self._cc.noproxy:
-            cfg["noproxy"] = self._cc.noproxy
+        infra_env = self.ensure_infraenv_created(is_workers=True)
 
-        self._ai.ensure_infraenv_created(infra_env, cfg)
         hosts_with_workers = self._all_hosts_with_workers()
 
         # Ensure the virtual bridge is properly configured and
@@ -435,10 +455,7 @@ class ClusterDeployer:
         logger.info("waiting for workers to be ready")
         self.wait_for_workers()
 
-        logger.info("Setting password to for root to redhat")
-        for h in hosts_with_workers:
-            for worker in h.k8s_worker_nodes:
-                worker.set_password()
+        self.nodes_set_password(is_workers=True, hosts=hosts_with_workers)
 
         # Make sure any submitted tasks have completed.
         for p in futures:
